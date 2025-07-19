@@ -14,6 +14,7 @@ class Vulnerability(BaseModel):
         description: Human-readable description of the vulnerability
         code_snippet: The actual code that triggered the finding
         recommendation: Suggested fix or mitigation
+        language: Programming language of the file (e.g., 'python', 'javascript', 'cpp')
     """
     type: str = Field(..., description="Type of vulnerability")
     severity: str = Field(..., description="Severity level")
@@ -22,6 +23,7 @@ class Vulnerability(BaseModel):
     description: str = Field(..., description="Description of the vulnerability")
     code_snippet: str = Field(..., description="Code snippet that triggered the finding")
     recommendation: Optional[str] = Field(None, description="Suggested fix or mitigation")
+    language: Optional[str] = Field(None, description="Programming language of the file")
     
     class Config:
         json_schema_extra = {
@@ -32,7 +34,8 @@ class Vulnerability(BaseModel):
                 "line_number": 15,
                 "description": "AWS access key found in code",
                 "code_snippet": "aws_key = 'AKIAIOSFODNN7EXAMPLE'",
-                "recommendation": "Use environment variables or AWS IAM roles instead"
+                "recommendation": "Use environment variables or AWS IAM roles instead",
+                "language": "python"
             }
         }
 
