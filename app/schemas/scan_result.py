@@ -7,7 +7,7 @@ class Vulnerability(BaseModel):
     Represents a single vulnerability finding.
     
     Attributes:
-        type: The type of vulnerability (e.g., 'hardcoded_secret', 'sql_injection')
+        type: The type of vulnerability (e.g., 'hardcoded_secret', 'sql_injection', 'eval_exec')
         severity: Severity level ('low', 'medium', 'high', 'critical')
         file_path: Path to the file where the vulnerability was found
         line_number: Line number where the vulnerability was detected
@@ -28,13 +28,13 @@ class Vulnerability(BaseModel):
     class Config:
         json_schema_extra = {
             "example": {
-                "type": "hardcoded_secret",
+                "type": "eval_exec",
                 "severity": "high",
-                "file_path": "config/database.py",
+                "file_path": "src/processor.py",
                 "line_number": 15,
-                "description": "AWS access key found in code",
-                "code_snippet": "aws_key = 'AKIAIOSFODNN7EXAMPLE'",
-                "recommendation": "Use environment variables or AWS IAM roles instead",
+                "description": "Use of eval() or exec() - dangerous code execution",
+                "code_snippet": "result = eval(user_input)",
+                "recommendation": "Avoid eval() and exec(). Use safer alternatives like ast.literal_eval() for simple cases.",
                 "language": "python"
             }
         }
@@ -53,6 +53,16 @@ class ScanSummary(BaseModel):
     total_vulnerabilities: int = Field(..., description="Total vulnerabilities found")
     scan_duration_seconds: float = Field(..., description="Scan duration in seconds")
     scan_types_performed: List[str] = Field(..., description="Types of scans performed")
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "total_files_scanned": 25,
+                "total_vulnerabilities": 3,
+                "scan_duration_seconds": 12.5,
+                "scan_types_performed": ["secrets", "injection", "dangerous_functions"]
+            }
+        }
 
 class ScanResult(BaseModel):
     """
@@ -65,7 +75,7 @@ class ScanResult(BaseModel):
         status: Scan status ('completed', 'failed', 'in_progress')
         summary: Summary statistics
         vulnerabilities: List of found vulnerabilities
-        metadata: Additional scan metadata
+        metadata: Additional scan metadata including supported languages and extensions
     """
     repo_url: str = Field(..., description="Scanned repository URL")
     scan_id: str = Field(..., description="Unique scan identifier")
@@ -83,15 +93,50 @@ class ScanResult(BaseModel):
                 "scan_timestamp": "2024-01-15T10:30:00Z",
                 "status": "completed",
                 "summary": {
-                    "total_files_scanned": 150,
+                    "total_files_scanned": 25,
                     "total_vulnerabilities": 3,
-                    "scan_duration_seconds": 45.2,
+                    "scan_duration_seconds": 12.5,
                     "scan_types_performed": ["secrets", "injection", "dangerous_functions"]
                 },
-                "vulnerabilities": [],
+                "vulnerabilities": [
+                    {
+                        "type": "eval_exec",
+                        "severity": "high",
+                        "file_path": "src/processor.py",
+                        "line_number": 15,
+                        "description": "Use of eval() or exec() - dangerous code execution",
+                        "code_snippet": "result = eval(user_input)",
+                        "recommendation": "Avoid eval() and exec(). Use safer alternatives like ast.literal_eval() for simple cases.",
+                        "language": "python"
+                    },
+                    {
+                        "type": "innerhtml",
+                        "severity": "medium",
+                        "file_path": "frontend/app.js",
+                        "line_number": 42,
+                        "description": "Direct innerHTML assignment - potential XSS",
+                        "code_snippet": "document.getElementById('content').innerHTML = userData;",
+                        "recommendation": "Use textContent or proper DOM manipulation methods.",
+                        "language": "javascript"
+                    },
+                    {
+                        "type": "gets_function",
+                        "severity": "critical",
+                        "file_path": "src/input.cpp",
+                        "line_number": 8,
+                        "description": "Use of gets() - buffer overflow vulnerability",
+                        "code_snippet": "gets(buffer);",
+                        "recommendation": "Use fgets() or std::getline() instead of gets().",
+                        "language": "cpp"
+                    }
+                ],
                 "metadata": {
                     "scanner_version": "0.1.0",
-                    "scan_type": "all"
+                    "scan_type": "all",
+                    "phase": "2 - Basic Regex Scanner",
+                    "languages_supported": ["python", "javascript", "cpp"],
+                    "files_scanned": 25,
+                    "supported_extensions": [".py", ".js", ".jsx", ".ts", ".tsx", ".cpp", ".cc", ".cxx", ".c++", ".c", ".h", ".hpp"]
                 }
             }
         } 
