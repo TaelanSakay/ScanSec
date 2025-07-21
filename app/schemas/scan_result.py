@@ -48,11 +48,13 @@ class ScanSummary(BaseModel):
         total_vulnerabilities: Total number of vulnerabilities found
         scan_duration_seconds: Time taken for the scan
         scan_types_performed: List of scan types that were executed
+        language_breakdown: Number of vulnerabilities per language
     """
     total_files_scanned: int = Field(..., description="Number of files processed")
     total_vulnerabilities: int = Field(..., description="Total vulnerabilities found")
     scan_duration_seconds: float = Field(..., description="Scan duration in seconds")
     scan_types_performed: List[str] = Field(..., description="Types of scans performed")
+    language_breakdown: Dict[str, int] = Field(default_factory=dict, description="Number of vulnerabilities per language")
     
     class Config:
         json_schema_extra = {
@@ -60,7 +62,8 @@ class ScanSummary(BaseModel):
                 "total_files_scanned": 25,
                 "total_vulnerabilities": 3,
                 "scan_duration_seconds": 12.5,
-                "scan_types_performed": ["secrets", "injection", "dangerous_functions"]
+                "scan_types_performed": ["secrets", "injection", "dangerous_functions"],
+                "language_breakdown": {"python": 2, "javascript": 1, "cpp": 1}
             }
         }
 

@@ -369,37 +369,53 @@ def clone_repository(repo_url: str) -> str:
     """
     Clone the repository to a temporary directory.
     
-    TODO: Add authentication support for private repositories
-    TODO: Implement shallow clone for better performance
-    TODO: Add support for other VCS systems (Mercurial, SVN)
-    """
-    temp_dir = tempfile.mkdtemp()
+    Handles errors for invalid URLs, repo not found, network issues, timeouts, and missing git.
     
+    TODO: Add retry logic or GitHub API support for more robust cloning
+    """
+    import re
+    from fastapi import HTTPException
+    temp_dir = tempfile.mkdtemp()
+
+    # Basic GitHub URL validation
+    github_url_pattern = re.compile(r"^https://github.com/[^/]+/[^/]+/?(\.git)?$")
+    if not github_url_pattern.match(repo_url):
+        raise HTTPException(status_code=400, detail="Invalid GitHub repository URL format. Expected: https://github.com/user/repo")
+
     try:
         # Extract repo name from URL
         repo_name = repo_url.rstrip('/').split('/')[-1]
         if repo_name.endswith('.git'):
             repo_name = repo_name[:-4]
-        
         clone_url = repo_url if repo_url.endswith('.git') else f"{repo_url}.git"
-        
-        # Clone the repository with timeout
+
+        # Try to clone with a short timeout for responsiveness
         result = subprocess.run(
             ['git', 'clone', clone_url, temp_dir],
             capture_output=True,
             text=True,
-            timeout=300  # 5 minute timeout
+            timeout=15,  # Short timeout for initial connection
+            check=False
         )
-        
         if result.returncode != 0:
-            raise Exception(f"Failed to clone repository: {result.stderr}")
-        
+            stderr = result.stderr.lower()
+            if 'not found' in stderr or 'repository' in stderr and 'not found' in stderr:
+                raise HTTPException(status_code=404, detail="Repository not found or inaccessible (404). Please check the URL.")
+            if 'could not resolve host' in stderr or 'network' in stderr or 'connection' in stderr:
+                raise HTTPException(status_code=500, detail="Network error while cloning repository. Please check your connection.")
+            if 'fatal: not a git repository' in stderr or 'fatal: unable to access' in stderr:
+                raise HTTPException(status_code=400, detail="Invalid or inaccessible repository URL.")
+            if 'git: not found' in stderr or 'not recognized as an internal or external command' in stderr:
+                raise HTTPException(status_code=500, detail="Git is not installed on the server.")
+            # Fallback for other errors
+            raise HTTPException(status_code=500, detail=f"Failed to clone repository: {result.stderr.strip()}")
         return temp_dir
-        
     except subprocess.TimeoutExpired:
-        raise Exception("Repository clone timed out")
+        raise HTTPException(status_code=504, detail="Repository clone timed out. Please try again later.")
+    except HTTPException:
+        raise
     except Exception as e:
-        raise Exception(f"Failed to clone repository: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Unexpected error during repository clone: {str(e)}")
 
 def find_source_files(repo_path: str) -> List[str]:
     """
@@ -467,6 +483,7 @@ async def scan_repository(request: ScanRequest):
         # Scan each file for vulnerabilities
         all_vulnerabilities = []
         files_scanned = 0
+        language_breakdown = {}
         
         for file_path in source_files:
             # Convert to relative path for reporting
@@ -476,6 +493,9 @@ async def scan_repository(request: ScanRequest):
             # Update file paths to be relative
             for vuln in vulnerabilities:
                 vuln.file_path = relative_path
+                # Count vulnerabilities per language
+                if vuln.language:
+                    language_breakdown[vuln.language] = language_breakdown.get(vuln.language, 0) + 1
             
             all_vulnerabilities.extend(vulnerabilities)
             files_scanned += 1
@@ -488,7 +508,8 @@ async def scan_repository(request: ScanRequest):
             total_files_scanned=files_scanned,
             total_vulnerabilities=len(all_vulnerabilities),
             scan_duration_seconds=scan_duration,
-            scan_types_performed=[request.scan_type] if request.scan_type != "all" else ["secrets", "injection", "dangerous_functions"]
+            scan_types_performed=[request.scan_type] if request.scan_type != "all" else ["secrets", "injection", "dangerous_functions"],
+            language_breakdown=language_breakdown
         )
         
         # Generate unique scan ID
