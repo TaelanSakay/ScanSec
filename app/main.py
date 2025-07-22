@@ -15,10 +15,10 @@ app = FastAPI(
 # Add CORS middleware for future web UI integration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # TODO: Configure properly for production
+    allow_origins=["http://localhost:3000"],  # TODO: Make this configurable via .env for production use
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 # Include routers

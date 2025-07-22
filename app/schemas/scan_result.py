@@ -67,6 +67,28 @@ class ScanSummary(BaseModel):
             }
         }
 
+class ScanMetadata(BaseModel):
+    """
+    Timing metadata for a scan.
+
+    Attributes:
+        start_time: ISO 8601 UTC timestamp when scan started
+        end_time: ISO 8601 UTC timestamp when scan ended
+        duration_seconds: Total scan duration in seconds
+    """
+    start_time: str = Field(..., description="Scan start time (ISO 8601, UTC)")
+    end_time: str = Field(..., description="Scan end time (ISO 8601, UTC)")
+    duration_seconds: float = Field(..., description="Scan duration in seconds")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "start_time": "2025-07-19T16:30:12Z",
+                "end_time": "2025-07-19T16:30:14Z",
+                "duration_seconds": 2.14
+            }
+        }
+
 class ScanResult(BaseModel):
     """
     Complete scan result response.
@@ -79,6 +101,7 @@ class ScanResult(BaseModel):
         summary: Summary statistics
         vulnerabilities: List of found vulnerabilities
         metadata: Additional scan metadata including supported languages and extensions
+        scan_metadata: Timing metadata for the scan (start/end/duration)
     """
     repo_url: str = Field(..., description="Scanned repository URL")
     scan_id: str = Field(..., description="Unique scan identifier")
@@ -87,7 +110,8 @@ class ScanResult(BaseModel):
     summary: ScanSummary = Field(..., description="Scan summary statistics")
     vulnerabilities: List[Vulnerability] = Field(default_factory=list, description="Found vulnerabilities")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional scan metadata")
-    
+    scan_metadata: Optional[ScanMetadata] = Field(None, description="Timing metadata for the scan")
+
     class Config:
         json_schema_extra = {
             "example": {
@@ -111,26 +135,6 @@ class ScanResult(BaseModel):
                         "code_snippet": "result = eval(user_input)",
                         "recommendation": "Avoid eval() and exec(). Use safer alternatives like ast.literal_eval() for simple cases.",
                         "language": "python"
-                    },
-                    {
-                        "type": "innerhtml",
-                        "severity": "medium",
-                        "file_path": "frontend/app.js",
-                        "line_number": 42,
-                        "description": "Direct innerHTML assignment - potential XSS",
-                        "code_snippet": "document.getElementById('content').innerHTML = userData;",
-                        "recommendation": "Use textContent or proper DOM manipulation methods.",
-                        "language": "javascript"
-                    },
-                    {
-                        "type": "gets_function",
-                        "severity": "critical",
-                        "file_path": "src/input.cpp",
-                        "line_number": 8,
-                        "description": "Use of gets() - buffer overflow vulnerability",
-                        "code_snippet": "gets(buffer);",
-                        "recommendation": "Use fgets() or std::getline() instead of gets().",
-                        "language": "cpp"
                     }
                 ],
                 "metadata": {
@@ -140,6 +144,11 @@ class ScanResult(BaseModel):
                     "languages_supported": ["python", "javascript", "cpp"],
                     "files_scanned": 25,
                     "supported_extensions": [".py", ".js", ".jsx", ".ts", ".tsx", ".cpp", ".cc", ".cxx", ".c++", ".c", ".h", ".hpp"]
+                },
+                "scan_metadata": {
+                    "start_time": "2025-07-19T16:30:12Z",
+                    "end_time": "2025-07-19T16:30:14Z",
+                    "duration_seconds": 2.14
                 }
             }
         } 

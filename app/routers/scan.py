@@ -11,6 +11,7 @@ from typing import List, Dict, Any, Optional
 
 from app.models.scan import ScanRequest
 from app.schemas.scan_result import ScanResult, ScanSummary, Vulnerability
+from app.schemas.scan_result import ScanMetadata
 
 router = APIRouter()
 
@@ -465,6 +466,9 @@ async def scan_repository(request: ScanRequest):
     Raises:
         HTTPException: If the scan fails or repository is inaccessible
     """
+    # Record scan start time (UTC, ISO 8601)
+    scan_start_dt = datetime.utcnow()
+    scan_start_iso = scan_start_dt.isoformat(timespec="seconds") + 'Z'
     start_time = time.time()
     
     try:
@@ -501,6 +505,8 @@ async def scan_repository(request: ScanRequest):
             files_scanned += 1
         
         # Calculate scan duration
+        scan_end_dt = datetime.utcnow()
+        scan_end_iso = scan_end_dt.isoformat(timespec="seconds") + 'Z'
         scan_duration = time.time() - start_time
         
         # Create summary
@@ -519,7 +525,7 @@ async def scan_repository(request: ScanRequest):
         result = ScanResult(
             repo_url=str(request.repo_url),
             scan_id=scan_id,
-            scan_timestamp=datetime.utcnow(),
+            scan_timestamp=scan_end_dt,
             status="completed",
             summary=summary,
             vulnerabilities=all_vulnerabilities,
@@ -530,8 +536,14 @@ async def scan_repository(request: ScanRequest):
                 "languages_supported": ["python", "javascript", "cpp"],
                 "files_scanned": files_scanned,
                 "supported_extensions": [".py", ".js", ".jsx", ".ts", ".tsx", ".cpp", ".cc", ".cxx", ".c++", ".c", ".h", ".hpp"]
-            }
+            },
+            scan_metadata=ScanMetadata(
+                start_time=scan_start_iso,
+                end_time=scan_end_iso,
+                duration_seconds=round(scan_duration, 2)
+            )
         )
+        # TODO: Store scan history or cache scan_metadata for future retrieval (Phase 4)
         
         # Clean up temporary directory
         import shutil
