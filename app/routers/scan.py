@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Body
 from datetime import datetime
 import uuid
 import time
@@ -8,10 +8,13 @@ import tempfile
 import subprocess
 from pathlib import Path
 from typing import List, Dict, Any, Optional
+from pydantic import BaseModel, HttpUrl
+import git
 
 from app.models.scan import ScanRequest
 from app.schemas.scan_result import ScanResult, ScanSummary, Vulnerability
 from app.schemas.scan_result import ScanMetadata
+from app.scanners import scan_file_by_language
 
 router = APIRouter()
 
@@ -19,287 +22,56 @@ router = APIRouter()
 # TODO: Phase 3 - Add support for external security tools (Bandit, Semgrep, etc.)
 # TODO: Phase 4 - Implement custom rule engine for user-defined patterns
 
-def scan_python_file(file_path: str, content: str) -> List[Vulnerability]:
-    """
-    Scan Python files for security vulnerabilities using regex patterns.
-    
-    TODO: Enhance with AST analysis for better accuracy
-    TODO: Add more sophisticated pattern matching
-    TODO: Integrate with Bandit for additional checks
-    TODO: Make patterns configurable via external config file
-    """
-    vulnerabilities = []
-    lines = content.split('\n')
-    
-    # Comprehensive regex patterns for Python vulnerabilities
-    # TODO: Replace with AST-based analysis for better accuracy
-    patterns = {
-        'eval_exec': {
-            'pattern': r'\b(eval|exec)\s*\(',
-            'description': 'Use of eval() or exec() - dangerous code execution',
-            'severity': 'high',
-            'recommendation': 'Avoid eval() and exec(). Use safer alternatives like ast.literal_eval() for simple cases.'
-        },
-        'pickle_unsafe': {
-            'pattern': r'\b(pickle\.loads?|pickle\.load)\s*\(',
-            'description': 'Use of pickle.load() - potential code injection',
-            'severity': 'high',
-            'recommendation': 'Avoid pickle for untrusted data. Use JSON or other serialization formats.'
-        },
-        'os_system': {
-            'pattern': r'\bos\.system\s*\(',
-            'description': 'Use of os.system() - command injection risk',
-            'severity': 'medium',
-            'recommendation': 'Use subprocess.run() with proper argument handling.'
-        },
-        'subprocess_shell': {
-            'pattern': r'\bsubprocess\.(Popen|call|run)\s*\([^)]*shell\s*=\s*True',
-            'description': 'Use of subprocess with shell=True - command injection risk',
-            'severity': 'high',
-            'recommendation': 'Avoid shell=True. Use list arguments instead.'
-        },
-        'hardcoded_secrets': {
-            'pattern': r'(api_key|secret|password|token|key)\s*=\s*[\'"][^\'"]+[\'"]',
-            'description': 'Hardcoded secret found in code',
-            'severity': 'medium',
-            'recommendation': 'Use environment variables or secure secret management.'
-        },
-        'sql_injection': {
-            'pattern': r'(execute|executemany)\s*\(\s*[\'"][^\'"]*\+',
-            'description': 'Potential SQL injection - string concatenation in SQL',
-            'severity': 'high',
-            'recommendation': 'Use parameterized queries or ORM methods.'
-        },
-        'input_function': {
-            'pattern': r'\binput\s*\(',
-            'description': 'Use of input() - potential injection risk',
-            'severity': 'medium',
-            'recommendation': 'Use raw_input() or validate input carefully.'
-        },
-        'file_operations': {
-            'pattern': r'open\s*\([^)]*[\'"][^\'"]*[\'"][^)]*\)',
-            'description': 'File operation without proper path validation',
-            'severity': 'medium',
-            'recommendation': 'Validate file paths and use pathlib for safer operations.'
-        },
-        'urllib_unsafe': {
-            'pattern': r'\burllib\.(urlopen|request)\s*\(',
-            'description': 'Use of urllib - potential SSRF risk',
-            'severity': 'medium',
-            'recommendation': 'Use requests library with proper URL validation.'
-        }
-    }
-    
-    for line_num, line in enumerate(lines, 1):
-        for vuln_type, config in patterns.items():
-            matches = re.finditer(config['pattern'], line, re.IGNORECASE)
-            for match in matches:
-                vulnerabilities.append(Vulnerability(
-                    type=vuln_type,
-                    severity=config['severity'],
-                    file_path=file_path,
-                    line_number=line_num,
-                    description=config['description'],
-                    code_snippet=line.strip(),
-                    recommendation=config['recommendation'],
-                    language='python'
-                ))
-    
-    return vulnerabilities
+class ScanRepoRequest(BaseModel):
+    repo_url: HttpUrl
 
-def scan_js_file(file_path: str, content: str) -> List[Vulnerability]:
+@router.post("/scan-repo")
+async def scan_repo(request: ScanRepoRequest):
     """
-    Scan JavaScript files for security vulnerabilities using regex patterns.
-    
-    TODO: Enhance with ESLint security rules integration
-    TODO: Add more XSS and injection patterns
-    TODO: Implement AST-based analysis
-    TODO: Make patterns configurable via external config file
+    Scan a public GitHub repository for vulnerabilities in Python, JavaScript, and C++ files.
+    Returns a structured JSON report of all detected vulnerabilities by language and file.
     """
-    vulnerabilities = []
-    lines = content.split('\n')
-    
-    # Comprehensive regex patterns for JavaScript vulnerabilities
-    # TODO: Replace with ESLint security plugin integration
-    patterns = {
-        'eval_function': {
-            'pattern': r'\b(eval|Function)\s*\(',
-            'description': 'Use of eval() or Function() - dangerous code execution',
-            'severity': 'high',
-            'recommendation': 'Avoid eval() and Function(). Use safer alternatives.'
-        },
-        'innerhtml_xss': {
-            'pattern': r'\.innerHTML\s*=',
-            'description': 'Direct innerHTML assignment - potential XSS',
-            'severity': 'medium',
-            'recommendation': 'Use textContent or proper DOM manipulation methods.'
-        },
-        'document_write': {
-            'pattern': r'\bdocument\.write\s*\(',
-            'description': 'Use of document.write() - potential XSS',
-            'severity': 'medium',
-            'recommendation': 'Use DOM manipulation methods instead.'
-        },
-        'unescaped_input': {
-            'pattern': r'innerHTML\s*=\s*[^;]*[\'"][^;]*[\'"][^;]*\+',
-            'description': 'Unescaped user input in innerHTML',
-            'severity': 'high',
-            'recommendation': 'Always escape user input before inserting into DOM.'
-        },
-        'localstorage_secrets': {
-            'pattern': r'localStorage\.setItem\s*\(\s*[\'"][^\'"]*[\'"]\s*,\s*[\'"][^\'"]*[\'"]',
-            'description': 'Storing sensitive data in localStorage',
-            'severity': 'medium',
-            'recommendation': 'Avoid storing sensitive data in localStorage. Use secure alternatives.'
-        },
-        'sessionstorage_secrets': {
-            'pattern': r'sessionStorage\.setItem\s*\(\s*[\'"][^\'"]*[\'"]\s*,\s*[\'"][^\'"]*[\'"]',
-            'description': 'Storing sensitive data in sessionStorage',
-            'severity': 'medium',
-            'recommendation': 'Avoid storing sensitive data in sessionStorage.'
-        },
-        'settimeout_injection': {
-            'pattern': r'setTimeout\s*\(\s*[\'"][^\'"]*[\'"]\s*,',
-            'description': 'setTimeout with string - potential code injection',
-            'severity': 'medium',
-            'recommendation': 'Use function references instead of strings in setTimeout.'
-        },
-        'setinterval_injection': {
-            'pattern': r'setInterval\s*\(\s*[\'"][^\'"]*[\'"]\s*,',
-            'description': 'setInterval with string - potential code injection',
-            'severity': 'medium',
-            'recommendation': 'Use function references instead of strings in setInterval.'
-        },
-        'location_assign': {
-            'pattern': r'location\.(href|assign)\s*=',
-            'description': 'Direct location assignment - potential open redirect',
-            'severity': 'medium',
-            'recommendation': 'Validate URLs before assignment.'
-        },
-        'console_log_secrets': {
-            'pattern': r'console\.(log|warn|error)\s*\(\s*[\'"][^\'"]*(password|secret|token|key)[^\'"]*[\'"]',
-            'description': 'Logging sensitive information',
-            'severity': 'low',
-            'recommendation': 'Avoid logging sensitive data.'
-        }
-    }
-    
-    for line_num, line in enumerate(lines, 1):
-        for vuln_type, config in patterns.items():
-            matches = re.finditer(config['pattern'], line, re.IGNORECASE)
-            for match in matches:
-                vulnerabilities.append(Vulnerability(
-                    type=vuln_type,
-                    severity=config['severity'],
-                    file_path=file_path,
-                    line_number=line_num,
-                    description=config['description'],
-                    code_snippet=line.strip(),
-                    recommendation=config['recommendation'],
-                    language='javascript'
-                ))
-    
-    return vulnerabilities
-
-def scan_cpp_file(file_path: str, content: str) -> List[Vulnerability]:
-    """
-    Scan C++ files for security vulnerabilities using regex patterns.
-    
-    TODO: Enhance with Clang Static Analyzer integration
-    TODO: Add more buffer overflow and memory safety checks
-    TODO: Implement custom static analysis rules
-    TODO: Make patterns configurable via external config file
-    """
-    vulnerabilities = []
-    lines = content.split('\n')
-    
-    # Comprehensive regex patterns for C++ vulnerabilities
-    # TODO: Replace with Clang Static Analyzer integration
-    patterns = {
-        'gets_function': {
-            'pattern': r'\bgets\s*\(',
-            'description': 'Use of gets() - buffer overflow vulnerability',
-            'severity': 'critical',
-            'recommendation': 'Use fgets() or std::getline() instead of gets().'
-        },
-        'strcpy_unsafe': {
-            'pattern': r'\bstrcpy\s*\(',
-            'description': 'Use of strcpy() - potential buffer overflow',
-            'severity': 'high',
-            'recommendation': 'Use strncpy() or std::string instead.'
-        },
-        'strcat_unsafe': {
-            'pattern': r'\bstrcat\s*\(',
-            'description': 'Use of strcat() - potential buffer overflow',
-            'severity': 'high',
-            'recommendation': 'Use strncat() or std::string instead.'
-        },
-        'system_call': {
-            'pattern': r'\bsystem\s*\(',
-            'description': 'Use of system() - command injection risk',
-            'severity': 'medium',
-            'recommendation': 'Use specific APIs instead of system() calls.'
-        },
-        'hardcoded_credentials': {
-            'pattern': r'(password|secret|key)\s*=\s*[\'"][^\'"]+[\'"]',
-            'description': 'Hardcoded credentials found in code',
-            'severity': 'medium',
-            'recommendation': 'Use configuration files or environment variables.'
-        },
-        'malloc_no_check': {
-            'pattern': r'\bmalloc\s*\([^)]*\)\s*;',
-            'description': 'malloc() without null check',
-            'severity': 'medium',
-            'recommendation': 'Always check malloc() return value for null.'
-        },
-        'free_after_use': {
-            'pattern': r'\bfree\s*\([^)]*\)\s*;',
-            'description': 'Potential use-after-free or double-free',
-            'severity': 'medium',
-            'recommendation': 'Use smart pointers or RAII for memory management.'
-        },
-        'scanf_unsafe': {
-            'pattern': r'\bscanf\s*\(',
-            'description': 'Use of scanf() - potential buffer overflow',
-            'severity': 'medium',
-            'recommendation': 'Use scanf_s() or std::cin with proper bounds checking.'
-        },
-        'printf_format_string': {
-            'pattern': r'\bprintf\s*\(\s*[^)]*%[^)]*\)',
-            'description': 'printf with format string - potential format string attack',
-            'severity': 'medium',
-            'recommendation': 'Use format string validation or safer alternatives.'
-        },
-        'memcpy_unsafe': {
-            'pattern': r'\bmemcpy\s*\(',
-            'description': 'Use of memcpy() - potential buffer overflow',
-            'severity': 'medium',
-            'recommendation': 'Use memcpy_s() or std::copy with proper bounds checking.'
-        },
-        'sprintf_unsafe': {
-            'pattern': r'\bsprintf\s*\(',
-            'description': 'Use of sprintf() - potential buffer overflow',
-            'severity': 'medium',
-            'recommendation': 'Use snprintf() or std::string instead.'
-        }
-    }
-    
-    for line_num, line in enumerate(lines, 1):
-        for vuln_type, config in patterns.items():
-            matches = re.finditer(config['pattern'], line, re.IGNORECASE)
-            for match in matches:
-                vulnerabilities.append(Vulnerability(
-                    type=vuln_type,
-                    severity=config['severity'],
-                    file_path=file_path,
-                    line_number=line_num,
-                    description=config['description'],
-                    code_snippet=line.strip(),
-                    recommendation=config['recommendation'],
-                    language='cpp'
-                ))
-    
-    return vulnerabilities
+    # Sanitize and validate input
+    repo_url = str(request.repo_url)
+    if not repo_url.startswith("https://github.com/"):
+        raise HTTPException(status_code=400, detail="Only public GitHub repositories are supported.")
+    # Only allow valid repo URLs
+    import re
+    if not re.match(r"^https://github.com/[\w\-\.]+/[\w\-\.]+/?(\.git)?$", repo_url):
+        raise HTTPException(status_code=400, detail="Invalid GitHub repository URL format.")
+    # Clone repo to temp dir
+    temp_dir = tempfile.mkdtemp()
+    try:
+        git.Repo.clone_from(repo_url, temp_dir, depth=1)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to clone repository: {e}")
+    # Recursively find code files
+    allowed_exts = {'.py', '.js', '.cpp', '.h'}
+    code_files = []
+    for root, dirs, files in os.walk(temp_dir):
+        # Skip .git and node_modules, etc.
+        dirs[:] = [d for d in dirs if d not in {'.git', 'node_modules', '__pycache__', 'venv', '.venv'}]
+        for file in files:
+            ext = Path(file).suffix.lower()
+            if ext in allowed_exts:
+                code_files.append(os.path.join(root, file))
+    # Scan files
+    results = {}
+    for file_path in code_files:
+        language = determine_language(file_path)
+        if not language:
+            continue
+        rel_path = os.path.relpath(file_path, temp_dir)
+        vulns = scan_file(file_path, language_override=language)
+        if not vulns:
+            continue
+        if language not in results:
+            results[language] = {}
+        results[language][rel_path] = [v.dict() for v in vulns]
+    # Clean up
+    import shutil
+    shutil.rmtree(temp_dir, ignore_errors=True)
+    return {"repo_url": repo_url, "vulnerabilities": results}
 
 def determine_language(file_path: str) -> Optional[str]:
     """
@@ -327,9 +99,9 @@ def determine_language(file_path: str) -> Optional[str]:
     
     return language_map.get(file_ext)
 
-def scan_file(file_path: str) -> List[Vulnerability]:
+def scan_file(file_path: str, language_override: Optional[str] = None) -> List[Vulnerability]:
     """
-    Scan a single file for vulnerabilities based on its extension.
+    Scan a single file for vulnerabilities based on its extension or a language override.
     
     TODO: Add file size limits and binary file detection
     TODO: Implement parallel processing for large files
@@ -350,14 +122,13 @@ def scan_file(file_path: str) -> List[Vulnerability]:
             content = f.read()
         
         # Determine language and route to appropriate scanner
-        language = determine_language(file_path)
+        language = language_override or determine_language(file_path)
         
-        if language == 'python':
-            return scan_python_file(file_path, content)
-        elif language == 'javascript':
-            return scan_js_file(file_path, content)
-        elif language == 'cpp':
-            return scan_cpp_file(file_path, content)
+        if language:
+            # Use the new modular scanner
+            vulns = scan_file_by_language(file_path, content, language)
+            # Convert dicts to Vulnerability objects
+            return [Vulnerability(**v) for v in vulns]
         else:
             return []
             
@@ -484,23 +255,21 @@ async def scan_repository(request: ScanRequest):
                 detail="No supported source files found in repository"
             )
         
-        # Scan each file for vulnerabilities
+        # If language is specified in request, filter files
+        language_filter = getattr(request, 'language', None)
         all_vulnerabilities = []
         files_scanned = 0
         language_breakdown = {}
-        
         for file_path in source_files:
-            # Convert to relative path for reporting
+            detected_language = determine_language(file_path)
+            if language_filter and detected_language != language_filter:
+                continue
             relative_path = os.path.relpath(file_path, repo_path)
-            vulnerabilities = scan_file(file_path)
-            
-            # Update file paths to be relative
+            vulnerabilities = scan_file(file_path, language_override=language_filter)
             for vuln in vulnerabilities:
                 vuln.file_path = relative_path
-                # Count vulnerabilities per language
                 if vuln.language:
                     language_breakdown[vuln.language] = language_breakdown.get(vuln.language, 0) + 1
-            
             all_vulnerabilities.extend(vulnerabilities)
             files_scanned += 1
         

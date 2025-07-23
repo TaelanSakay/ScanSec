@@ -299,50 +299,25 @@ def test_language_detection():
     return all_passed
 
 def test_regex_patterns():
-    """Test specific regex patterns for each language."""
-    print("\n🔍 Testing regex patterns...")
-    
-    from app.routers.scan import scan_python_file, scan_js_file, scan_cpp_file
-    
-    # Test Python patterns
-    python_content = '''
-eval("print('hello')")
-exec("import os")
-pickle.loads(data)
-os.system("rm -rf /")
-api_key = "secret123"
-'''
+    """Test minimal pattern detection for each language using modular scanner."""
+    from app.scanners.python_scanner import scan_python_file
+    from app.scanners.js_scanner import scan_js_file
+    from app.scanners.cpp_scanner import scan_cpp_file
+    # Python
+    python_content = 'eval("print(1)")\nexec("import os")\n'
     python_vulns = scan_python_file("test.py", python_content)
-    print(f"   Python vulnerabilities found: {len(python_vulns)}")
-    
-    # Test JavaScript patterns
-    js_content = '''
-eval(userData)
-document.getElementById('content').innerHTML = userData
-localStorage.setItem('token', 'secret')
-setTimeout("alert('hello')", 1000)
-'''
+    assert any(v['type'] == 'eval' for v in python_vulns), "Should detect eval in Python"
+    assert any(v['type'] == 'exec' for v in python_vulns), "Should detect exec in Python"
+    # JavaScript
+    js_content = 'Function("return 1;")\n'
     js_vulns = scan_js_file("test.js", js_content)
-    print(f"   JavaScript vulnerabilities found: {len(js_vulns)}")
-    
-    # Test C++ patterns
-    cpp_content = '''
-gets(buffer)
-strcpy(dest, src)
-system("rm -rf /")
-password = "secret123"
-malloc(100)
-'''
+    assert any(v['type'] == 'Function' for v in js_vulns), "Should detect Function in JS"
+    # C++
+    cpp_content = 'system("ls")\nexec("ls")\n'
     cpp_vulns = scan_cpp_file("test.cpp", cpp_content)
-    print(f"   C++ vulnerabilities found: {len(cpp_vulns)}")
-    
-    total_vulns = len(python_vulns) + len(js_vulns) + len(cpp_vulns)
-    if total_vulns > 0:
-        print("✅ Regex patterns working correctly")
-        return True
-    else:
-        print("❌ Regex patterns not detecting vulnerabilities")
-        return False
+    assert any(v['type'] == 'system' for v in cpp_vulns), "Should detect system in C++"
+    assert any(v['type'] == 'exec' for v in cpp_vulns), "Should detect exec in C++"
+    return True
 
 def main():
     """Run all tests."""
