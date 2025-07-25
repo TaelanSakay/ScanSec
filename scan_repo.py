@@ -6,7 +6,7 @@ import json
 def main():
     parser = argparse.ArgumentParser(description="Scan a GitHub repo for code vulnerabilities using the ScanSec API.")
     parser.add_argument("repo_url", help="GitHub repository URL (public)")
-    parser.add_argument("--api", default="http://localhost:8000/api/v1/scan-repo", help="ScanSec API endpoint URL")
+    parser.add_argument("--api", default="http://localhost:3000/api/v1/scan-repo", help="ScanSec API endpoint URL")
     args = parser.parse_args()
 
     payload = {"repo_url": args.repo_url}

@@ -204,7 +204,7 @@ def test_api_endpoint():
         import requests
         
         # Test health endpoint
-        response = requests.get("http://localhost:8000/health")
+        response = requests.get("http://localhost:3000/health")
         if response.status_code == 200:
             print("✅ Health endpoint working")
             health_data = response.json()

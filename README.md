@@ -64,12 +64,12 @@ uvicorn app.main:app --reload
 #### API Usage
 ```bash
 # Scan a GitHub repository
-curl -X POST "http://localhost:8000/scan" \
+curl -X POST "http://localhost:3000/scan" \
   -H "Content-Type: application/json" \
   -d '{"repo_url": "https://github.com/user/repo"}'
 
 # Check health status
-curl "http://localhost:8000/health"
+curl "http://localhost:3000/health"
 ```
 
 #### Testing

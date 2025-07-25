@@ -14,7 +14,7 @@ def test_health_endpoint():
     print("🏥 Testing health endpoint...")
     
     try:
-        response = requests.get("http://localhost:8000/health")
+        response = requests.get("http://localhost:3000/health")
         if response.status_code == 200:
             data = response.json()
             print("✅ Health endpoint working")
@@ -45,7 +45,7 @@ def test_scan_endpoint():
     try:
         print(f"   Scanning repository: {test_repo}")
         response = requests.post(
-            "http://localhost:8000/api/v1/scan",
+            "http://localhost:3000/api/v1/scan",
             json=scan_data,
             timeout=60  # 60 second timeout
         )
@@ -87,7 +87,7 @@ def test_scan_result_endpoint():
     
     # This endpoint is not implemented yet, so we expect a 404
     try:
-        response = requests.get("http://localhost:8000/api/v1/scan/test_scan_id")
+        response = requests.get("http://localhost:3000/api/v1/scan/test_scan_id")
         if response.status_code == 404:
             print("✅ Scan result endpoint correctly returns 404 (not implemented yet)")
             return True
@@ -103,7 +103,7 @@ def test_root_endpoint():
     print("\n🏠 Testing root endpoint...")
     
     try:
-        response = requests.get("http://localhost:8000/")
+        response = requests.get("http://localhost:3000/")
         if response.status_code == 200:
             data = response.json()
             print("✅ Root endpoint working")

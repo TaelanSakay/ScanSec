@@ -1,1 +1,1 @@
-# ScanSec Application Package 
+# ScanSec Backend Application 

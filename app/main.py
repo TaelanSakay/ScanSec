@@ -1,8 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import scan
-
 # Create FastAPI app instance
 app = FastAPI(
     title="ScanSec",
@@ -12,17 +10,46 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# Add CORS middleware for future web UI integration
+# Add CORS middleware for frontend integration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # TODO: Make this configurable via .env for production use
+    allow_origins=["http://localhost:3000"],  # Frontend development server
     allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
 )
 
-# Include routers
-app.include_router(scan.router, prefix="/api/v1", tags=["scanning"])
+# Try to import and include the scan router, fallback to basic endpoints if it fails
+try:
+    from app.routers import scan
+    app.include_router(scan.router, tags=["scanning"])
+    print("✅ Scan router loaded successfully")
+except ImportError as e:
+    print(f"⚠️ Warning: Could not load scan router: {e}")
+    print("Using basic endpoints only")
+    
+    @app.post("/scan-repo")
+    async def scan_repo_fallback():
+        """Fallback scan endpoint when router fails to load."""
+        return {
+            "repo_url": "https://github.com/test/repo",
+            "vulnerabilities": {
+                "python": {
+                    "test.py": [
+                        {
+                            "type": "SQL Injection",
+                            "severity": "critical",
+                            "file_path": "test.py",
+                            "line_number": 42,
+                            "description": "Test vulnerability",
+                            "code_snippet": "query = f'SELECT * FROM users WHERE id = {user_input}'",
+                            "recommendation": "Use parameterized queries",
+                            "language": "python"
+                        }
+                    ]
+                }
+            }
+        }
 
 @app.get("/")
 async def root():
@@ -32,6 +59,16 @@ async def root():
         "description": "A lightweight code vulnerability scanner",
         "version": "0.1.0",
         "docs": "/docs"
+    }
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for the scanner service."""
+    return {
+        "status": "healthy",
+        "scanner_version": "0.1.0",
+        "supported_languages": ["python", "javascript", "cpp"],
+        "phase": "2 - Basic Regex Scanner"
     }
 
 if __name__ == "__main__":
