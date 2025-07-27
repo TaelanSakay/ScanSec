@@ -1,196 +1,238 @@
-import React from 'react';
-import { Settings as SettingsIcon, Shield, Bell, Database, Key } from 'lucide-react';
-import config from '../config';
+import React, { useState, useEffect } from 'react';
+import { User as UserIcon, Shield, Key, Save, AlertCircle, CheckCircle } from 'lucide-react';
+import apiClient, { UserUpdateRequest } from '../api';
 
 const Settings: React.FC = () => {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | undefined>();
+  const [success, setSuccess] = useState<string | undefined>();
+  
+  const [formData, setFormData] = useState<UserUpdateRequest>({
+    username: '',
+    email: '',
+    current_password: '',
+    new_password: ''
+  });
+
+  useEffect(() => {
+    const loadUser = async () => {
+      try {
+        const userData = await apiClient.getCurrentUser();
+        setFormData({
+          username: userData.username,
+          email: userData.email,
+          current_password: '',
+          new_password: ''
+        });
+      } catch (error) {
+        setError('Failed to load user information');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadUser();
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    setError(undefined);
+    setSuccess(undefined);
+
+    try {
+      await apiClient.updateUser(formData);
+      setSuccess('Profile updated successfully');
+      
+      // Clear password fields
+      setFormData(prev => ({
+        ...prev,
+        current_password: '',
+        new_password: ''
+      }));
+    } catch (err: any) {
+      setError(err.message || 'Failed to update profile');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData(prev => ({
+      ...prev,
+      [e.target.name]: e.target.value
+    }));
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+          <p className="text-textSecondary">Loading settings...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-textPrimary">Settings</h1>
-        <p className="text-textSecondary mt-1">Configure your vulnerability scanner preferences</p>
+    <div className="max-w-2xl mx-auto">
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold text-textPrimary mb-2">Settings</h1>
+        <p className="text-textSecondary">Manage your account and preferences</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Scanner Settings */}
-        <div className="bg-card rounded-lg border border-gray-200">
-          <div className="p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                <Shield className="w-5 h-5 text-primary" />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold text-textPrimary">Scanner Settings</h2>
-                <p className="text-sm text-textSecondary">Configure scan behavior and rules</p>
-              </div>
+      <div className="space-y-6">
+        {/* Profile Section */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="flex items-center mb-4">
+            <UserIcon className="h-5 w-5 text-primary mr-2" />
+            <h2 className="text-lg font-semibold text-textPrimary">Profile Information</h2>
+          </div>
+
+          {error && (
+            <div className="flex items-center gap-2 p-3 bg-status-critical/10 border border-status-critical/20 rounded-md text-status-critical mb-4">
+              <AlertCircle className="h-4 w-4" />
+              <span className="text-sm">{error}</span>
             </div>
-            
-            <div className="space-y-4">
+          )}
+
+          {success && (
+            <div className="flex items-center gap-2 p-3 bg-green-100 border border-green-200 rounded-md text-green-700 mb-4">
+              <CheckCircle className="h-4 w-4" />
+              <span className="text-sm">{success}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-textSecondary mb-2">
-                  Scan Depth
-                </label>
-                <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary">
-                  <option>Shallow (Recommended)</option>
-                  <option>Deep</option>
-                  <option>Custom</option>
-                </select>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-textSecondary mb-2">
-                  File Size Limit
+                <label htmlFor="username" className="block text-sm font-medium text-textPrimary mb-1">
+                  Username
                 </label>
                 <input
-                  type="number"
-                  defaultValue="1024"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                  id="username"
+                  name="username"
+                  type="text"
+                  value={formData.username}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                 />
-                <p className="text-xs text-textSecondary mt-1">Maximum file size in KB</p>
               </div>
-              
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-textPrimary">Enable Advanced Rules</p>
-                  <p className="text-xs text-textSecondary">Use custom vulnerability patterns</p>
-                </div>
-                <button className="w-12 h-6 bg-gray-200 rounded-full relative">
-                  <div className="w-5 h-5 bg-white rounded-full shadow transform translate-x-1"></div>
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
 
-        {/* Notifications */}
-        <div className="bg-card rounded-lg border border-gray-200">
-          <div className="p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                <Bell className="w-5 h-5 text-green-600" />
-              </div>
               <div>
-                <h2 className="text-lg font-semibold text-textPrimary">Notifications</h2>
-                <p className="text-sm text-textSecondary">Configure alert preferences</p>
+                <label htmlFor="email" className="block text-sm font-medium text-textPrimary mb-1">
+                  Email
+                </label>
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                />
               </div>
             </div>
-            
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
+
+            <div className="border-t pt-4">
+              <h3 className="text-md font-medium text-textPrimary mb-3">Change Password</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <p className="text-sm font-medium text-textPrimary">Critical Vulnerabilities</p>
-                  <p className="text-xs text-textSecondary">Get notified for critical findings</p>
+                  <label htmlFor="current_password" className="block text-sm font-medium text-textPrimary mb-1">
+                    Current Password
+                  </label>
+                  <input
+                    id="current_password"
+                    name="current_password"
+                    type="password"
+                    value={formData.current_password}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    placeholder="Enter current password"
+                  />
                 </div>
-                <button className="w-12 h-6 bg-primary rounded-full relative">
-                  <div className="w-5 h-5 bg-white rounded-full shadow transform translate-x-6"></div>
-                </button>
-              </div>
-              
-              <div className="flex items-center justify-between">
+
                 <div>
-                  <p className="text-sm font-medium text-textPrimary">Scan Completion</p>
-                  <p className="text-xs text-textSecondary">Notify when scans finish</p>
+                  <label htmlFor="new_password" className="block text-sm font-medium text-textPrimary mb-1">
+                    New Password
+                  </label>
+                  <input
+                    id="new_password"
+                    name="new_password"
+                    type="password"
+                    value={formData.new_password}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    placeholder="Enter new password"
+                  />
                 </div>
-                <button className="w-12 h-6 bg-primary rounded-full relative">
-                  <div className="w-5 h-5 bg-white rounded-full shadow transform translate-x-6"></div>
-                </button>
-              </div>
-              
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-textPrimary">Weekly Reports</p>
-                  <p className="text-xs text-textSecondary">Send weekly summary emails</p>
-                </div>
-                <button className="w-12 h-6 bg-gray-200 rounded-full relative">
-                  <div className="w-5 h-5 bg-white rounded-full shadow transform translate-x-1"></div>
-                </button>
               </div>
             </div>
-          </div>
+
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                disabled={saving}
+                className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 disabled:opacity-50"
+              >
+                {saving ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
+                {saving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </form>
         </div>
 
         {/* API Configuration */}
-        <div className="bg-card rounded-lg border border-gray-200">
-          <div className="p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                <Key className="w-5 h-5 text-blue-600" />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold text-textPrimary">API Configuration</h2>
-                <p className="text-sm text-textSecondary">Manage API keys and endpoints</p>
-              </div>
-            </div>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-textSecondary mb-2">
-                  API Base URL
-                </label>
-                <input
-                  type="url"
-                  defaultValue={config.API_BASE_URL}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-                <p className="text-xs text-textSecondary mt-1">Current: {config.API_BASE_URL}</p>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-textSecondary mb-2">
-                  API Key
-                </label>
-                <input
-                  type="password"
-                  placeholder="Enter your API key"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-              </div>
-              
-              <button className="w-full px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition">
-                Test Connection
-              </button>
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="flex items-center mb-4">
+            <Key className="h-5 w-5 text-primary mr-2" />
+            <h2 className="text-lg font-semibold text-textPrimary">API Configuration</h2>
+          </div>
+          
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-textPrimary mb-1">
+                API Base URL
+              </label>
+              <input
+                type="text"
+                value="http://localhost:8000"
+                disabled
+                className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-gray-500"
+              />
+              <p className="text-xs text-textSecondary mt-1">
+                Backend server URL (read-only)
+              </p>
             </div>
           </div>
         </div>
 
-        {/* Data Management */}
-        <div className="bg-card rounded-lg border border-gray-200">
-          <div className="p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
-                <Database className="w-5 h-5 text-purple-600" />
-              </div>
+        {/* Security Information */}
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="flex items-center mb-4">
+            <Shield className="h-5 w-5 text-primary mr-2" />
+            <h2 className="text-lg font-semibold text-textPrimary">Security</h2>
+          </div>
+          
+          <div className="space-y-3">
+            <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-md">
               <div>
-                <h2 className="text-lg font-semibold text-textPrimary">Data Management</h2>
-                <p className="text-sm text-textSecondary">Manage scan history and data</p>
+                <p className="text-sm font-medium text-green-800">Account Status</p>
+                <p className="text-xs text-green-600">Your account is active and secure</p>
               </div>
+              <div className="h-2 w-2 bg-green-500 rounded-full"></div>
             </div>
             
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-textPrimary">Auto-cleanup</p>
-                  <p className="text-xs text-textSecondary">Remove old scan data</p>
-                </div>
-                <button className="w-12 h-6 bg-gray-200 rounded-full relative">
-                  <div className="w-5 h-5 bg-white rounded-full shadow transform translate-x-1"></div>
-                </button>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-textSecondary mb-2">
-                  Retention Period
-                </label>
-                <select className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary">
-                  <option>30 days</option>
-                  <option>90 days</option>
-                  <option>1 year</option>
-                  <option>Forever</option>
-                </select>
-              </div>
-              
-              <button className="w-full px-4 py-2 bg-status-critical text-white rounded-lg hover:bg-status-critical/90 transition">
-                Clear All Data
-              </button>
+            <div className="text-sm text-textSecondary">
+              <p>• Passwords are securely hashed using bcrypt</p>
+              <p>• JWT tokens are used for authentication</p>
+              <p>• All API requests are protected with HTTPS</p>
             </div>
           </div>
         </div>

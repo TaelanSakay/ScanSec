@@ -1,74 +1,69 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.routers import auth, scan
+from app.database import init_models, async_engine
+from sqlalchemy import text
+import os
+import logging
 
-# Create FastAPI app instance
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 app = FastAPI(
-    title="ScanSec",
-    description="A lightweight code vulnerability scanner for GitHub repositories",
-    version="0.1.0",
-    docs_url="/docs",
-    redoc_url="/redoc"
+    title="ScanSec API",
+    description="Security vulnerability scanner for GitHub repositories",
+    version="1.0.0"
 )
 
-# Add CORS middleware for frontend integration
+# Configure CORS
+origins = [
+    "http://localhost:3000",  # Development
+    "https://scansec.vercel.app",  # Production frontend
+    "https://scansec-frontend.vercel.app",  # Alternative production URL
+]
+
+# Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Frontend development server
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Try to import and include the scan router, fallback to basic endpoints if it fails
-try:
-    from app.routers import scan
-    app.include_router(scan.router, tags=["scanning"])
-    print("✅ Scan router loaded successfully")
-except ImportError as e:
-    print(f"⚠️ Warning: Could not load scan router: {e}")
-    print("Using basic endpoints only")
-    
-    @app.post("/scan-repo")
-    async def scan_repo_fallback():
-        """Fallback scan endpoint when router fails to load."""
-        return {
-            "repo_url": "https://github.com/test/repo",
-            "vulnerabilities": {
-                "python": {
-                    "test.py": [
-                        {
-                            "type": "SQL Injection",
-                            "severity": "critical",
-                            "file_path": "test.py",
-                            "line_number": 42,
-                            "description": "Test vulnerability",
-                            "code_snippet": "query = f'SELECT * FROM users WHERE id = {user_input}'",
-                            "recommendation": "Use parameterized queries",
-                            "language": "python"
-                        }
-                    ]
-                }
-            }
-        }
+# Include routers
+app.include_router(auth.router, prefix="/auth", tags=["authentication"])
+app.include_router(scan.router, prefix="/scan", tags=["scanning"])  # Prefixed routes
+app.include_router(scan.scan_repo_router, tags=["scanning"])  # Direct routes without prefix
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database tables on startup"""
+    try:
+        async with async_engine.begin() as conn:
+            await init_models()  # Create tables
+            result = await conn.run_sync(
+                lambda sync_conn: sync_conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'"))
+            )
+            tables = [row[0] for row in result.fetchall()]
+            print(f"✅ Database initialized. Tables: {tables}")
+    except Exception as e:
+        import traceback
+        print("❌ Failed to initialize database:", e)
+        traceback.print_exc()
 
 @app.get("/")
 async def root():
-    """Root endpoint with basic project information."""
-    return {
-        "message": "Welcome to ScanSec",
-        "description": "A lightweight code vulnerability scanner",
-        "version": "0.1.0",
-        "docs": "/docs"
-    }
+    return {"message": "ScanSec API is running"}
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint for the scanner service."""
     return {
         "status": "healthy",
-        "scanner_version": "0.1.0",
-        "supported_languages": ["python", "javascript", "cpp"],
-        "phase": "2 - Basic Regex Scanner"
+        "version": "1.0.0",
+        "ai_available": bool(os.getenv("CLAUDE_API_KEY")),
+        "database": "connected"
     }
 
 if __name__ == "__main__":
