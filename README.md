@@ -2,6 +2,9 @@
 
 A lightweight **code vulnerability scanner** that helps developers and security-minded engineers quickly audit GitHub repositories for insecure code patterns.
 
+<img width="1918" height="917" alt="image" src="https://github.com/user-attachments/assets/c4dac1a4-46f9-4877-869a-a21e4d019b0a" />
+
+
 ## 🎯 Goals
 
 ScanSec is designed for educational and small-team use, focusing on:
