@@ -5,21 +5,5 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
-      - key: DATABASE_URL
-        value: postgresql://scansec_user:scansec_password@scansec-db.internal:5432/scansec_db
-      - key: SECRET_KEY
-        generateValue: true
-      - key: ALGORITHM
-        value: HS256
-      - key: ACCESS_TOKEN_EXPIRE_MINUTES
-        value: 30
-      - key: CLAUDE_API_KEY
-        sync: false
-    healthCheckPath: /health
-    autoDeploy: true
-
-databases:
-  - name: scansec-db
-    databaseName: scansec_db
-    user: scansec_user
-    plan: free 
+      - key: PYTHON_VERSION
+        value: 3.9.16 
