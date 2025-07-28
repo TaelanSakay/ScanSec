@@ -3,7 +3,7 @@ export const config = {
   // API Configuration
   API_BASE_URL: process.env.REACT_APP_API_BASE_URL || 
     (process.env.NODE_ENV === 'production' 
-      ? 'https://scansec-backend.onrender.com' 
+      ? 'https://your-render-backend-url.onrender.com' 
       : 'http://localhost:8000'),
   
   // Development settings
