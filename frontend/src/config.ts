@@ -1,7 +1,10 @@
 // Configuration for the application
 export const config = {
   // API Configuration
-  API_BASE_URL: process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000',
+  API_BASE_URL: process.env.REACT_APP_API_BASE_URL || 
+    (process.env.NODE_ENV === 'production' 
+      ? 'https://your-backend-url.vercel.app' 
+      : 'http://localhost:8000'),
   
   // Development settings
   IS_DEVELOPMENT: process.env.NODE_ENV === 'development',
