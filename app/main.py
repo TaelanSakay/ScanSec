@@ -19,8 +19,9 @@ app = FastAPI(
 # Configure CORS
 origins = [
     "http://localhost:3000",  # Development
-    "https://scansec.vercel.app",  # Production frontend
-    "https://scansec-frontend.vercel.app",  # Alternative production URL
+    "https://scan-sec.vercel.app",  # Production frontend
+    "https://*.vercel.app",  # Any Vercel subdomain
+    "https://*.onrender.com",  # Any Render subdomain
 ]
 
 # Add CORS middleware
@@ -28,8 +29,9 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Include routers
@@ -65,6 +67,11 @@ async def health_check():
         "ai_available": bool(os.getenv("CLAUDE_API_KEY")),
         "database": "connected"
     }
+
+@app.options("/{full_path:path}")
+async def options_handler(full_path: str):
+    """Handle OPTIONS requests for CORS preflight"""
+    return {"message": "OK"}
 
 if __name__ == "__main__":
     import uvicorn

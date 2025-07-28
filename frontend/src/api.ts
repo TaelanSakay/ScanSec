@@ -165,8 +165,11 @@ class ApiClient {
 
   // Error message helper
   private getErrorMessage(error: any): string {
+    console.error('Full error object:', error);
+    
     if (error.response) {
       const { status, data } = error.response;
+      console.error('Response error:', { status, data });
       
       switch (status) {
         case 400:
@@ -185,8 +188,10 @@ class ApiClient {
           return data?.detail || `Server error (${status}). Please try again.`;
       }
     } else if (error.request) {
+      console.error('Request error:', error.request);
       return 'Network error. Please check your connection and ensure the backend server is running.';
     } else {
+      console.error('Other error:', error.message);
       return error.message || 'An unexpected error occurred.';
     }
   }
