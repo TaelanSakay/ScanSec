@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Clock, Download, Eye, AlertCircle, CheckCircle, XCircle } from 'lucide-react';
 import apiClient from '../api';
 import Toast, { ToastType } from './Toast';
+import ScanViewModal from './ScanViewModal';
 
 interface ScanHistoryItem {
   id: number;
@@ -17,9 +18,15 @@ interface ScanHistoryItem {
 }
 
 const History: React.FC = () => {
-  const [scanHistory, setScanHistory] = useState<ScanHistoryItem[]>([]);
+  const [scanHistory, setScanHistory] = useState<ScanHistoryItem[]>(() => {
+    // Load from localStorage on first render
+    const saved = localStorage.getItem("scanHistory");
+    return saved ? JSON.parse(saved) : [];
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | undefined>();
+  const [selectedScan, setSelectedScan] = useState<ScanHistoryItem | null>(null);
+  const [viewModalOpen, setViewModalOpen] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: ToastType; isVisible: boolean }>({
     message: '',
     type: 'success',
@@ -37,28 +44,73 @@ const History: React.FC = () => {
   const fetchScanHistory = useCallback(async () => {
     try {
       setLoading(true);
-      const history = await apiClient.getScanHistory();
-      setScanHistory(history);
+      
+      // Try to fetch from API, but don't fail if it's not available
+      try {
+        const history = await apiClient.getScanHistory();
+        console.log('API scan history:', history);
+
+        if (Array.isArray(history) && history.length > 0) {
+          const transformedHistory = history.map((scan: any) => ({
+            id: scan.id || scan.scan_id || Date.now() + Math.random(),
+            repo_url: scan.repo_url || scan.repository_url || "Unknown Repository",
+            scan_timestamp: scan.scan_timestamp || scan.created_at || new Date().toISOString(),
+            scan_duration: scan.scan_duration || scan.duration_seconds || 0,
+            total_vulnerabilities: scan.total_vulnerabilities || scan.vulnerability_count || 0,
+            critical_count: scan.critical_count || 0,
+            high_count: scan.high_count || 0,
+            medium_count: scan.medium_count || 0,
+            low_count: scan.low_count || 0,
+            status: scan.status || "completed",
+          }));
+
+          // Merge with existing localStorage data, avoiding duplicates
+          const existing = JSON.parse(localStorage.getItem("scanHistory") || "[]");
+          const merged = [...transformedHistory, ...existing];
+          
+          // Remove duplicates based on id
+          const unique = merged.filter((scan, index, self) => 
+            index === self.findIndex(s => s.id === scan.id)
+          );
+          
+          setScanHistory(unique);
+          localStorage.setItem("scanHistory", JSON.stringify(unique));
+        }
+      } catch (apiError) {
+        console.log('API not available, using localStorage data only');
+        // API failed, but we already have localStorage data loaded
+      }
     } catch (err: any) {
-      setError(err.message || 'Failed to fetch scan history');
-      showToast(err.message || 'Failed to fetch scan history', 'error');
+      console.error("Failed to process scan history:", err);
+      setError(err.message || "Failed to process scan history");
     } finally {
       setLoading(false);
     }
   }, []);
 
+  // Save to localStorage whenever scanHistory changes
   useEffect(() => {
+    localStorage.setItem("scanHistory", JSON.stringify(scanHistory));
+  }, [scanHistory]);
+
+  useEffect(() => {
+    // If we have localStorage data, show it immediately
+    const saved = localStorage.getItem("scanHistory");
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed.length > 0) {
+        setScanHistory(parsed);
+        setLoading(false);
+      }
+    }
+    
+    // Then try to fetch from API in background
     fetchScanHistory();
   }, [fetchScanHistory]);
 
-  const handleViewScan = async (scanId: number) => {
-    try {
-      await apiClient.getScanDetails(scanId);
-      // TODO: Navigate to scan details or open modal
-      showToast('Scan details loaded', 'success');
-    } catch (err: any) {
-      showToast(err.message || 'Failed to load scan details', 'error');
-    }
+  const handleViewScan = (scan: ScanHistoryItem) => {
+    setSelectedScan(scan);
+    setViewModalOpen(true);
   };
 
   const handleExportScan = (scan: ScanHistoryItem) => {
@@ -242,7 +294,7 @@ const History: React.FC = () => {
                 
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => handleViewScan(scan.id)}
+                    onClick={() => handleViewScan(scan)}
                     className="flex items-center gap-2 px-3 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition"
                   >
                     <Eye className="w-4 h-4" />
@@ -261,6 +313,17 @@ const History: React.FC = () => {
           ))}
         </div>
       )}
+
+      {/* Scan View Modal */}
+      <ScanViewModal
+        isOpen={viewModalOpen}
+        onClose={() => {
+          setViewModalOpen(false);
+          setSelectedScan(null);
+        }}
+        scan={selectedScan}
+        vulnerabilities={[]} // For now, we don't have detailed vulnerability data in history
+      />
     </div>
   );
 };

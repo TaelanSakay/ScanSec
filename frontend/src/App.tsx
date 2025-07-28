@@ -70,6 +70,8 @@ const App: React.FC = () => {
     authManager.clearAuth();
     setAuthenticated(false);
     setCurrentUser(null);
+    // Redirect to homepage after logout
+    window.location.href = '/';
   };
 
   if (loading) {
@@ -87,44 +89,42 @@ const App: React.FC = () => {
     <Router>
       <div className="min-h-screen bg-background">
         <Routes>
-          {/* Public routes */}
+          {/* Auth Routes */}
           <Route path="/login" element={
-            authenticated ? <Navigate to="/dashboard" replace /> : 
-            <LoginWrapper onLoginSuccess={handleLoginSuccess} />
-          } />
+            authenticated 
+              ? <Navigate to="/dashboard/new-scan" replace /> 
+              : <LoginWrapper onLoginSuccess={handleLoginSuccess} />
+          }/>
           <Route path="/signup" element={
-            authenticated ? <Navigate to="/dashboard" replace /> : 
-            <RegisterWrapper onRegisterSuccess={handleLoginSuccess} />
-          } />
-          <Route path="/home" element={<Home />} />
+            authenticated 
+              ? <Navigate to="/dashboard/new-scan" replace /> 
+              : <RegisterWrapper onRegisterSuccess={handleLoginSuccess} />
+          }/>
 
-          {/* Protected routes */}
-          <Route path="/dashboard" element={
+          {/* Protected Dashboard */}
+          <Route path="/dashboard/*" element={
             authenticated ? (
               <ScanProvider>
-                <MainLayout onLogout={handleLogout} user={currentUser} />
+                <MainLayout onLogout={handleLogout} user={currentUser}/>
               </ScanProvider>
             ) : (
-              <Navigate to="/home" replace />
+              <Navigate to="/login" replace />
             )
           }>
-            <Route index element={<Dashboard />} />
-            <Route path="vulnerabilities" element={<Vulnerabilities />} />
-            <Route path="reports" element={<Reports />} />
-            <Route path="history" element={<History />} />
-            <Route path="help" element={<HelpGuide />} />
-            <Route path="settings" element={<Settings />} />
+            <Route index element={<Dashboard/>}/>
+            <Route path="new-scan" element={<Dashboard/>}/>
+            <Route path="vulnerabilities" element={<Vulnerabilities/>}/>
+            <Route path="reports" element={<Reports/>}/>
+            <Route path="history" element={<History/>}/>
+            <Route path="help" element={<HelpGuide/>}/>
+            <Route path="settings" element={<Settings/>}/>
           </Route>
 
-          {/* Default route */}
-          <Route path="*" element={
-            authenticated ? <Navigate to="/dashboard" replace /> : <Navigate to="/home" replace />
-          } />
+          {/* Homepage route */}
+          <Route path="/" element={<Home />} />
           
-          {/* Root path redirect */}
-          <Route path="/" element={
-            authenticated ? <Navigate to="/dashboard" replace /> : <Navigate to="/home" replace />
-          } />
+          {/* Fallback */}
+          <Route path="*" element={<Navigate to={authenticated ? "/dashboard/new-scan" : "/"} replace />}/>
         </Routes>
       </div>
     </Router>

@@ -62,6 +62,11 @@ const AIFixModal: React.FC<AIFixModalProps> = ({ isOpen, onClose, vulnerability 
   useEffect(() => {
     if (isOpen && vulnerability) {
       fetchAIRecommendation();
+    } else if (!isOpen) {
+      // Reset state when modal closes
+      setRecommendation(null);
+      setError(null);
+      setLoading(false);
     }
   }, [isOpen, vulnerability, fetchAIRecommendation]);
 
@@ -69,6 +74,16 @@ const AIFixModal: React.FC<AIFixModalProps> = ({ isOpen, onClose, vulnerability 
     setRecommendation(null);
     setError(null);
     onClose();
+  };
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast('Copied to clipboard!', 'success');
+    } catch (err) {
+      console.error('Failed to copy to clipboard:', err);
+      showToast('Failed to copy to clipboard', 'error');
+    }
   };
 
   if (!isOpen) return null;
@@ -230,8 +245,8 @@ const AIFixModal: React.FC<AIFixModalProps> = ({ isOpen, onClose, vulnerability 
           {recommendation && (
             <button
               onClick={() => {
-                // TODO: Implement copy to clipboard
-                showToast('Recommendation copied to clipboard!', 'success');
+                const textToCopy = `Fixed Code:\n${recommendation.fixed_code}\n\nRecommendation:\n${recommendation.recommendation}`;
+                copyToClipboard(textToCopy);
               }}
               className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
             >

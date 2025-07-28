@@ -27,12 +27,6 @@ const Header: React.FC<HeaderProps> = ({ onLogout, user }) => {
 
         {/* Right Side */}
         <div className="flex items-center space-x-4">
-          {/* Notifications */}
-          <button className="relative p-2 text-gray-400 hover:text-gray-600 transition">
-            <Bell className="h-5 w-5" />
-            <span className="absolute top-0 right-0 h-2 w-2 bg-status-critical rounded-full"></span>
-          </button>
-
           {/* User Menu */}
           <div className="relative">
             <button

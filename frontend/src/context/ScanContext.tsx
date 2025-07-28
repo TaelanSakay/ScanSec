@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode, useMemo } from 'react';
 import { ScanResult, Vulnerability } from '../api';
 
 interface ScanContextType {
@@ -31,11 +31,19 @@ export const ScanProvider: React.FC<ScanProviderProps> = ({ children }) => {
   const [vulnerabilities, setVulnerabilities] = useState<Vulnerability[]>([]);
 
   const clearScanData = () => {
+    console.log('Clearing scan data');
     setCurrentScan(null);
     setVulnerabilities([]);
   };
 
-  const hasScanData = currentScan !== null && vulnerabilities.length > 0;
+  // Compute hasScanData using useMemo for better performance and reliability
+  const hasScanData = useMemo(() => {
+    const hasCurrentScan = currentScan !== null;
+    const hasVulnerabilities = vulnerabilities.length > 0;
+    const result = hasCurrentScan && hasVulnerabilities;
+    console.log('hasScanData computed:', { hasCurrentScan, hasVulnerabilities, result });
+    return result;
+  }, [currentScan, vulnerabilities]);
   
   console.log("ScanProvider state:", { currentScan: !!currentScan, vulnerabilities: vulnerabilities.length, hasScanData });
 

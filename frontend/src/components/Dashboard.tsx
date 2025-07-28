@@ -4,56 +4,15 @@ import ScanForm from './ScanForm';
 import apiClient from '../api';
 import { useScanContext } from '../context/ScanContext';
 import Toast, { ToastType } from './Toast';
+import { exportScanReport, exportCSVReport } from '../utils/reportGenerator';
 
 const Dashboard: React.FC = () => {
   console.log("Dashboard rendered");
   
-  const { currentScan, setCurrentScan, vulnerabilities, setVulnerabilities, hasScanData } = useScanContext();
+  const { currentScan, setCurrentScan, vulnerabilities, setVulnerabilities, hasScanData, clearScanData } = useScanContext();
   
-  // Add test vulnerabilities for debugging
-  useEffect(() => {
-    if (!hasScanData) {
-      const testVulnerabilities = [
-        {
-          id: 'test-1',
-          type: 'sql_injection',
-          severity: 'high',
-          file_path: 'test.py',
-          line_number: 15,
-          description: 'Potential SQL injection vulnerability',
-          code_snippet: 'query = "SELECT * FROM users WHERE id = " + user_input',
-          language: 'python'
-        },
-        {
-          id: 'test-2',
-          type: 'eval_exec',
-          severity: 'critical',
-          file_path: 'script.js',
-          line_number: 42,
-          description: 'Dangerous eval() usage',
-          code_snippet: 'eval(userInput)',
-          language: 'javascript'
-        }
-      ];
-      
-      // Set test data for debugging
-      setVulnerabilities(testVulnerabilities);
-      setCurrentScan({
-        repo_url: 'https://github.com/test/repo',
-        scan_id: 'test-scan',
-        scan_timestamp: new Date().toISOString(),
-        status: 'completed',
-        vulnerabilities: testVulnerabilities,
-        summary: {
-          total_files_scanned: 2,
-          total_vulnerabilities: 2,
-          scan_duration_seconds: 1,
-          scan_types_performed: ['test'],
-          language_breakdown: { python: 1, javascript: 1 }
-        }
-      });
-    }
-  }, [hasScanData, setVulnerabilities, setCurrentScan]);
+  // Removed automatic mock data loading - users should start with clean state
+  
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [scanHistory, setScanHistory] = useState<any[]>([]);
@@ -104,6 +63,39 @@ const Dashboard: React.FC = () => {
     fetchHistory();
   }, []);
 
+  // Helper function to save scan to localStorage
+  const saveScanToHistory = (scan: any) => {
+    try {
+      const existing = JSON.parse(localStorage.getItem("scanHistory") || "[]");
+      
+      // Calculate vulnerability counts by severity
+      const severityCounts = scan.vulnerabilities.reduce((acc: any, vuln: any) => {
+        const severity = vuln.severity.toLowerCase();
+        acc[severity] = (acc[severity] || 0) + 1;
+        return acc;
+      }, { critical: 0, high: 0, medium: 0, low: 0 });
+
+      const newScan = {
+        id: scan.scan_id || Date.now() + Math.random(),
+        repo_url: scan.repo_url,
+        scan_timestamp: scan.scan_timestamp || new Date().toISOString(),
+        scan_duration: scan.summary?.scan_duration_seconds || 0,
+        total_vulnerabilities: scan.vulnerabilities.length,
+        critical_count: severityCounts.critical,
+        high_count: severityCounts.high,
+        medium_count: severityCounts.medium,
+        low_count: severityCounts.low,
+        status: 'completed'
+      };
+
+      const updated = [newScan, ...existing];
+      localStorage.setItem("scanHistory", JSON.stringify(updated));
+      console.log('Scan saved to history:', newScan);
+    } catch (error) {
+      console.error('Failed to save scan to history:', error);
+    }
+  };
+
   const handleScanSubmit = async (repoUrl: string) => {
     setLoading(true);
     setError(undefined);
@@ -123,6 +115,10 @@ const Dashboard: React.FC = () => {
       
       setCurrentScan(result);
       setVulnerabilities(result.vulnerabilities);
+      
+      // Save completed scan to localStorage
+      saveScanToHistory(result);
+      
       showToast(`Scan completed! Found ${result.vulnerabilities.length} vulnerabilities.`, 'success');
     } catch (err: any) {
       const errorMessage = err.message || 'Failed to scan repository';
@@ -135,10 +131,42 @@ const Dashboard: React.FC = () => {
   };
 
   const handleNewScan = () => {
-    setCurrentScan(null);
-    setVulnerabilities([]);
+    console.log('New Scan clicked - clearing scan data');
+    // Use the clearScanData function from context to properly reset all state
+    clearScanData();
     setError(undefined);
+    setLoading(false);
     showToast('Ready for new scan', 'success');
+  };
+
+  const handleExportReport = () => {
+    if (!currentScan) {
+      showToast('No scan data available to export', 'error');
+      return;
+    }
+
+    try {
+      exportScanReport(currentScan, vulnerabilities);
+      showToast('Report exported successfully!', 'success');
+    } catch (error) {
+      console.error('Export failed:', error);
+      showToast('Failed to export report', 'error');
+    }
+  };
+
+  const handleExportCSV = () => {
+    if (!currentScan) {
+      showToast('No scan data available to export', 'error');
+      return;
+    }
+
+    try {
+      exportCSVReport(currentScan, vulnerabilities);
+      showToast('CSV report exported successfully!', 'success');
+    } catch (error) {
+      console.error('CSV export failed:', error);
+      showToast('Failed to export CSV report', 'error');
+    }
   };
 
   // Error boundary fallback
@@ -206,19 +234,9 @@ const Dashboard: React.FC = () => {
                 </div>
                 <h3 className="text-lg font-medium text-textPrimary mb-1">No scans yet</h3>
                 <p className="text-textSecondary">Run your first scan to see results here</p>
-                <div className="mt-4 p-4 bg-gray-100 rounded text-left text-xs">
-                  <strong>Debug Info:</strong><br/>
-                  scanHistory length: {scanHistory.length}<br/>
-                  scanHistory type: {typeof scanHistory}<br/>
-                  scanHistory: <pre>{JSON.stringify(scanHistory, null, 2)}</pre>
-                </div>
               </div>
             ) : (
               <div className="space-y-3">
-                <div className="p-4 bg-blue-100 rounded text-xs">
-                  <strong>Debug - Found {scanHistory.length} scans:</strong><br/>
-                  <pre>{JSON.stringify(scanHistory.slice(0, 2), null, 2)}</pre>
-                </div>
                 {scanHistory.slice(0, 3).map((scan) => (
                   <div key={scan.id} className="bg-card rounded-lg border border-gray-200 p-4">
                     <div className="flex items-center justify-between">
@@ -263,6 +281,8 @@ const Dashboard: React.FC = () => {
             vulnerabilities={vulnerabilities}
             loading={loading}
             error={error}
+            onExportJSON={handleExportReport}
+            onExportCSV={handleExportCSV}
           />
         </div>
       )}
